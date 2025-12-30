@@ -13,6 +13,10 @@ load_dotenv()
 
 app = FastAPI()
 
+@app.get("/")
+def root():
+    return {"message": "Venus SaaS API is Live & Running!"}
+
 # 2. Construct the Safe DB URL
 try:
     user = os.getenv("DB_USER")
