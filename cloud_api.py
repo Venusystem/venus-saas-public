@@ -34,10 +34,31 @@ def root(): return {"message": "Venus ERP v7 (Full Names)"}
 @app.post("/api/verify-license")
 def verify(p: Payload):
     with engine.begin() as conn:
-        res = conn.execute(text("SELECT subscription_status FROM tenants WHERE tenant_id=:t AND license_key=:k"), 
-                           {"t": p.tenant_id, "k": p.license_key}).fetchone()
-        if not res or res[0] != 'active': raise HTTPException(401, "Invalid/Expired")
-        conn.execute(text("INSERT INTO devices (device_id, tenant_id, last_seen) VALUES (:d, :t, NOW()) ON CONFLICT (device_id) DO UPDATE SET last_seen=NOW()"), {"d": p.device_id, "t": p.tenant_id})
+        # Fetch status AND expiry date
+        row = conn.execute(text("""
+            SELECT subscription_status, current_period_end, is_manual_override 
+            FROM tenants WHERE tenant_id=:t AND license_key=:k
+        """), {"t": p.tenant_id, "k": p.license_key}).fetchone()
+        
+        if not row:
+            raise HTTPException(401, "Invalid Credentials")
+        
+        status, expiry, override = row
+        
+        if not override:
+            # 1. Check if status is explicitly suspended
+            if status != 'active':
+                raise HTTPException(402, "Subscription Suspended")
+            
+            # 2. Check if time has run out
+            if expiry and expiry < datetime.now(timezone.utc):
+                # Auto-suspend the account if expired
+                conn.execute(text("UPDATE tenants SET subscription_status='expired' WHERE tenant_id=:t"), {"t": p.tenant_id})
+                raise HTTPException(402, "Subscription Expired")
+
+        # Log heartbeat
+        conn.execute(text("UPDATE devices SET last_seen=NOW() WHERE device_id=:d"), {"d": p.device_id})
+        
     return {"status": "active"}
 
 @app.post("/api/sync/items")
