@@ -125,6 +125,59 @@ def sync_expenses(p: Payload):
     except Exception as e:
         print(f"Exp Error: {e}")
         raise HTTPException(500, str(e))
+        
+# --- CUSTOMER PAYMENTS ---
+@app.post("/api/sync/customer_payments")
+def sync_cust_pay(p: Payload):
+    try:
+        with engine.begin() as conn:
+            for r in p.data:
+                conn.execute(text("""
+                    INSERT INTO customer_payments (id, tenant_id, local_id, payment_date, customer_name, amount, mode, reference, store_name, cashier_name)
+                    VALUES (gen_random_uuid(), :tid, :lid, :date, :cust, :amt, :mode, :ref, :store, :cash)
+                    ON CONFLICT (tenant_id, local_id) DO NOTHING
+                """), {
+                    "tid": p.tenant_id, "lid": r['local_id'], "date": r['date'], 
+                    "cust": r['customer'], "amt": r['amount'], "mode": r['mode'], 
+                    "ref": r['reference'], "store": r['store'], "cash": r['cashier']
+                })
+        return {"status": "success"}
+    except Exception as e: raise HTTPException(500, str(e))
 
+# --- SUPPLIER PAYMENTS ---
+@app.post("/api/sync/supplier_payments")
+def sync_supp_pay(p: Payload):
+    try:
+        with engine.begin() as conn:
+            for r in p.data:
+                conn.execute(text("""
+                    INSERT INTO supplier_payments (id, tenant_id, local_id, payment_date, supplier_name, amount, mode, reference, invoice_number, store_name, cashier_name)
+                    VALUES (gen_random_uuid(), :tid, :lid, :date, :sup, :amt, :mode, :ref, :inv, :store, :cash)
+                    ON CONFLICT (tenant_id, local_id) DO NOTHING
+                """), {
+                    "tid": p.tenant_id, "lid": r['local_id'], "date": r['date'], 
+                    "sup": r['supplier'], "amt": r['amount'], "mode": r['mode'], 
+                    "ref": r['reference'], "inv": r['invoice'], "store": r['store'], "cash": r['cashier']
+                })
+        return {"status": "success"}
+    except Exception as e: raise HTTPException(500, str(e))
+
+# --- CASH COUNTS ---
+@app.post("/api/sync/cash_counts")
+def sync_cash_counts(p: Payload):
+    try:
+        with engine.begin() as conn:
+            for r in p.data:
+                conn.execute(text("""
+                    INSERT INTO cash_counts (id, tenant_id, local_id, count_date, total_amount, shift, store_name, cashier_name)
+                    VALUES (gen_random_uuid(), :tid, :lid, :date, :amt, :shift, :store, :cash)
+                    ON CONFLICT (tenant_id, local_id) DO NOTHING
+                """), {
+                    "tid": p.tenant_id, "lid": r['local_id'], "date": r['date'], 
+                    "amt": r['total'], "shift": r['shift'], "store": r['store'], "cash": r['cashier']
+                })
+        return {"status": "success"}
+    except Exception as e: raise HTTPException(500, str(e))
+        
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=10000)
